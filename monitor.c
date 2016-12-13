@@ -6,7 +6,6 @@
 
 #include <linux/hidraw.h>
 #include <linux/input.h>
-
 /*
  * Ugly hack to work around failing compilation on systems that don't
   * yet populate new version of hidraw.h to userspace.
@@ -22,17 +21,20 @@
 #define PID "a052"
 #define NODEV "[NODEV]"
 
+struct data_struct {
+	double temp;
+	int co2_value;
+};
+
 char *get_path();
 
-int generate_out(int out[8]);
+int generate_out(struct data_struct *data);
 
 int decrypt(int key[8], int *data, int out[8]);
 
 int main(void)
 {
 	printf("\033[1;34m[INFO]\033[m starting the monitor.\n");
-	// printf("\033[1;31m[ERROR]\033[m can't start");
-
 
 	char *path;
 	int file_descriptor, result;
@@ -72,6 +74,7 @@ int main(void)
 	int decrypted[8] = {0};
 	char tmp[8] = {0};
 	int key[8] = {0xc4, 0xc6, 0xc0, 0x92, 0x40, 0x23, 0xdc, 0x96};
+	struct data_struct data;
 
 	for (int i = 0; i < 11; i++)
 	{
@@ -89,10 +92,20 @@ int main(void)
 			/* decrypt read bytes */
 			decrypt(key, encrypted, decrypted);
 
-			/* generating output */
-			generate_out(decrypted);
+			/* get data from encryption */
+			if(encrypted[0] == 0x50)
+			{
+				data.co2_value = decrypted[1] << 8 | decrypted[2];
+			} else if (decrypted[0] == 0x42)
+			{
+				data.temp = (decrypted[1] << 8 | decrypted[2]) / 16.0 - 273.15;
+			}
 		}
 	}
+
+	/* generating output */
+	generate_out(&data);
+
 	/* closing device */
 	close(file_descriptor);
 	printf("\033[1;34m[INFO]\033[m closed device %s successfully.\n", path);
@@ -155,32 +168,19 @@ char *get_path()
 
 		vid = udev_device_get_sysattr_value(dev, "idVendor");
 		pid = udev_device_get_sysattr_value(dev, "idProduct");
-
+		int proof = strcmp(vid, VID) == 0 && strcmp(pid, PID) == 0;
 
 		udev_device_unref(dev);
 
-		if (strcmp(vid, VID) == 0 && strcmp(pid, PID) == 0)
+		/* return the path of the device if the pid and vid are correct */
+		if (proof)
 		{
-
 			return (char *) out;
 		}
 
 	}
 
 	return NODEV;
-}
-
-
-int generate_out(int out[8])
-{
-
-	if (out[0] == 0x50)
-		printf("\033[1;33m[VALUE]\033[m CO2: %i\n", out[1] << 8 | out[2]); // co2
-
-	else if (out[0] == 0x42)
-		printf("\033[1;33m[VALUE]\033[m Temp: %.2lf\n", (out[1] << 8 | out[2]) / 16.0 - 273.15); // temperature
-
-	return 0;
 }
 
 int decrypt(int key[8], int *data, int out[8])
@@ -213,6 +213,20 @@ int decrypt(int key[8], int *data, int out[8])
 	{
 		out[d] = (0x100 + phase3[d] - ctmp[d]) & 0xff;
 	}
+
+	return 0;
+}
+
+int generate_out(struct data_struct *data)
+{
+	/* TODO dealing with the data in the data_struct data
+	 * i.e.
+	 * 	(i)		updating space-api
+	 * 	(ii)	save in a file
+	 * 	(iii)	blink some lights
+	 * 	(iv)	create a timestamp
+	 */
+	printf("\033[1;33m[VALUE]\033[m CO2: %i Temp: %.2lf\n", data -> co2_value, data -> temp);
 
 	return 0;
 }
