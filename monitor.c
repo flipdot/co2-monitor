@@ -93,7 +93,7 @@ int main(void)
 			decrypt(key, encrypted, decrypted);
 
 			/* get data from encryption */
-			if(encrypted[0] == 0x50)
+			if(decrypted[0] == 0x50)
 			{
 				data.co2_value = decrypted[1] << 8 | decrypted[2];
 			} else if (decrypted[0] == 0x42)
