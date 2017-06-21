@@ -11,7 +11,7 @@
 #include <stdint.h>
 /*
  * Ugly hack to work around failing compilation on systems that don't
-  * yet populate new version of hidraw.h to userspace.
+ * yet populate new version of hidraw.h to userspace.
  */
 #ifndef HIDIOCSFEATURE
 #warning Please have your distro update the userspace kernel headers
@@ -24,18 +24,27 @@
 #define PID "a052"
 #define NODEV "[NODEV]"
 
+/*
+ * escape code definitions for colorized output
+ */
+#define RED     "\033[1;31m"
+#define YELLOW  "\033[1;33m"
+#define BLUE    "\033[1;34m"
+#define COLOR_RESET   "\033[m"
+
 struct value_struct {
     double temp;
     uint16_t co2;
     char state;
 };
-int flag = -1;
+int flag = 0;
+int rtrn_code = 0;
 
 char *get_path();
 
 int generate_out(struct value_struct *data);
 
-uint64_t pseudo_decrypt(uint64_t *in_data);
+int pseudo_decrypt(uint64_t *in_data);
 
 void print_help();
 
@@ -46,100 +55,126 @@ int main(const int argc, char **argv) {
         switch (c) {
             case 'h':
                 print_help();
-                return 0;
+                rtrn_code = 0;
+                goto RTRN;
             case 'l':
-                flag = 1;
+                flag = -1;
                 break;
             case 'd': {
-                // TODO implement debug levels
                 int op = atoi(optarg);
                 if (op >= 0 && op <= 3) {
-                    flag = op + 3;
+                    flag = op;
                 } else {
                     print_help();
-                    return 1;
+                    rtrn_code = 1;
+                    goto RTRN;
                 }
                 break;
             }
             default:
                 print_help();
-                return 1;
+                rtrn_code = 1;
+                goto RTRN;
         }
     }
 
-    if (flag != 1)
-        printf("\033[1;34m[INFO]\033[m starting the monitor.\n");
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " starting the monitor.\n");
 
     char *path;
     int file_descriptor, result;
     uint8_t hid_io_feature[9] = {0};
 
-/* searching for device */
+    /* searching for device */
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " searching for device\n");
     path = get_path();
     if (strcmp(path, NODEV) == 0) {
-        if (flag != 1)
-            perror("\033[1;31m[ERROR]\033[m can't find device\nExiting...");
-        else
-            perror("[ERROR] can't find device\nExiting...");
-        return 2;
+        if (flag > 0)
+            perror(RED "[ERROR]" COLOR_RESET " can't find device\nExiting...");
+        rtrn_code = 2;
+        goto RTRN;
     }
-    if (flag != 1)
-        printf("\033[1;34m[INFO]\033[m found dev on path %s.\n", path);
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " found device on path %s.\n", path);
 
-/* open device */
+    /* open device */
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " opening device\n");
     file_descriptor = open(path, O_RDWR);
     if (file_descriptor < 0) {
-        if (flag != 1)
-            perror("\033[1;31m[ERROR]\033[m Unable to open device\nExiting...");
-        else
-            perror("[ERROR] Unable to open device\nExiting...");
-        return 3;
+        if (flag > 0)
+            perror(RED "[ERROR]" COLOR_RESET " Unable to open device\nExiting...");
+        rtrn_code = 3;
+        goto RTRN;
     }
 
-    if (flag != 1)
-        printf("\033[1;34m[INFO]\033[m opened device %s successfully.\n", path);
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " opened device %s successfully.\n", path);
 
-/* sending feature 'SET_REPORT' */
+    /* sending feature 'SET_REPORT' */
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " sending HID-Feature 'SET_REPORT' to device\n");
     result = ioctl(file_descriptor, HIDIOCSFEATURE(9), hid_io_feature);
-    if (result < 0) perror("HIDIOCSFEATURE");
+    if (result < 0) {
+        if (flag > 0)
+            printf(RED "[ERROR]" COLOR_RESET " something went wrong while sending HID I/O Feature\nExiting...\n");
+        rtrn_code = 4;
+        goto CLOSE_DEV;
+    }
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " HID-Feature 'SET_REPORT' successfully sent to device\n");
 
-/* reading from device */
+    /* reading from device */
     uint64_t recieved_data = 0;
     struct value_struct data = {0, 0, 0};
-
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " start reading from device\n");
     do {
         result = (int) read(file_descriptor, &recieved_data, 8);
 
         if (result < 0) {
-            if (flag != 1)
-                perror("\033[1;31m[ERROR]\033[m reading from device\nExiting...");
-            else
-                perror("[ERROR] reading from device\nExiting...");
+            if (flag > 0)
+                printf(RED "[ERROR]" COLOR_RESET " something went wrong while reading from device\nExiting...\n");
+            rtrn_code = 5;
+            goto CLOSE_DEV;
         } else {
-/* decrypt read bytes */
+            /* decrypt read bytes */
+            if (flag > 1)
+                printf(BLUE "[INFO]" COLOR_RESET " successfully received encrypted data from device\n");
             pseudo_decrypt(&recieved_data);
 
-/* get data from encryption */
+            /* get data from encryption */
             if ((recieved_data >> 56) == 0x50) {
-                data.co2 = (uint16_t)(recieved_data >> 40);
+                if (flag > 1)
+                    printf(BLUE "[INFO]" COLOR_RESET " successfully decrypted CO2 value\n");
+                data.co2 = (uint16_t) (recieved_data >> 40);
                 data.state |= 0x1;
             } else if ((recieved_data >> 56) == 0x42) {
+                if (flag > 1)
+                    printf(BLUE "[INFO]" COLOR_RESET " successfully decrypted temperature\n");
                 data.temp = ((recieved_data >> 40) & 0xffff) / 16.0 - 273.15;
                 data.state |= 0x2;
             }
         }
     } while (data.state != 3);
 
-/* generating output */
+
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " generating output\n");
+    /* generating output */
     generate_out(&data);
 
-/* closing device */
+    /* closing device */
+    CLOSE_DEV:
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " start closing device\n");
     close(file_descriptor);
+    if (flag > 1)
+        printf(BLUE "[INFO]" COLOR_RESET " closed device %s successfully.\nExiting...", path);
 
-    if (flag != 1)
-        printf("\033[1;34m[INFO]\033[m closed device %s successfully.\n", path);
-
-    return 0;
+    RTRN:
+    return rtrn_code;
 }
 
 char *get_path() {
@@ -154,7 +189,8 @@ char *get_path() {
     udev = udev_new();
 
     if (!udev) {
-        printf("\033[1;31m[ERROR]\033[m can't create udev device\n");
+        if (flag > 0)
+            printf(RED "[ERROR]" COLOR_RESET " can't create udev device\n");
         return NODEV;
     }
 
@@ -188,13 +224,14 @@ char *get_path() {
                 "usb",
                 "usb_device");
         if (!dev) {
-            printf("\033[1;31m[ERROR]\033[m Unable to find parent usb device.");
+            if (flag > 0)
+                printf(RED "[ERROR]" COLOR_RESET " Unable to find parent usb device.");
             return NODEV;
         }
 
         vid = udev_device_get_sysattr_value(dev, "idVendor");
         pid = udev_device_get_sysattr_value(dev, "idProduct");
-        int proof = strcmp(vid, VID) == 0 && strcmp(pid, PID) == 0;
+        int proof = (strcmp(vid, VID) == 0) && (strcmp(pid, PID) == 0);
 
         udev_device_unref(dev);
 
@@ -208,10 +245,10 @@ char *get_path() {
     return NODEV;
 }
 
-uint64_t pseudo_decrypt(uint64_t *in_data) {
+int pseudo_decrypt(uint64_t *in_data) {
     uint64_t out = 0;
 
-    /* phase 1 */
+    /* phase 1: shuffle */
     uint8_t shuffle[8] = {2, 4, 0, 7, 1, 6, 5, 3};
 
     for (int d = 0; d < 8; ++d) {
@@ -229,12 +266,11 @@ uint64_t pseudo_decrypt(uint64_t *in_data) {
         out |= ((out_tmp >> (j * 8)) & 0xff) << ((7 - j) * 8);
     }
 
-
-    /* phase 3 */
+    /* phase 3: cyclic shifting */
     uint64_t mask = out << 61;
     out = (out >> 3) | mask;
 
-    /* phase 4 */
+    /* phase 4: masquerade */
     uint8_t cstate[8] = {0x84, 0x47, 0x56, 0xD6, 0x07, 0x93, 0x93, 0x56};
     mask = (uint64_t) 0xFF << 56;
 
@@ -249,24 +285,27 @@ uint64_t pseudo_decrypt(uint64_t *in_data) {
 }
 
 int generate_out(struct value_struct *data) {
-    /* TODO dealing with the data in the data_struct data
+    /* have some fun here
      * i.e.
      * 	(i)		updating space-api
      * 	(ii)	save in a file
      * 	(iii)	blink some lights
      */
 
-    if (flag != 1)
-        printf("\033[1;33m[VALUE]\033[m CO2: %i Temp: %.2lf\n", data->co2, data->temp);
+    if (flag > -1)
+        printf(YELLOW "[VALUE]" COLOR_RESET " CO2: %i Temp: %.2lf\n", data->co2, data->temp);
     else
-        printf("%i\n%.2lf\n", data->co2, data->temp);
+        printf("CO2: %i\nTEM: %.2lf\n", data->co2, data->temp);
 
     return 0;
 }
 
 void print_help() {
     printf("co2monitor [options]\n"
-                   "    --help      -h                 display this help\n"
-                   "    --headless  -l                 run in headless-mode reduces output to an minimum\n"
-                   "    --debug     -d <debug-level>   higher debuglevel increases output (range: 0-3)\n");
+                   "   -h                 display this help\n"
+                   "   -l                 run in headless-mode reduces output to a minimum\n"
+                   "   -d <debug-level>   higher debuglevel specializes output:\n"
+                   "                          0 => only colorized output of the CO2-value and the temperature\n"
+                   "                          1 => like 0 with colorized additional ERROR-Messages\n"
+                   "                          2 => like 1 with colorized additional INFO-Messages\n");
 }
