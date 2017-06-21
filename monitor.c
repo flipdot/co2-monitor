@@ -91,7 +91,7 @@ int main(const int argc, char **argv) {
     path = get_path();
     if (strcmp(path, NODEV) == 0) {
         if (flag > 0)
-            perror(RED "[ERROR]" COLOR_RESET " can't find device\nExiting...");
+            printf(RED "[ERROR]" COLOR_RESET " can't find device\nExiting...");
         rtrn_code = 2;
         goto RTRN;
     }
@@ -104,7 +104,7 @@ int main(const int argc, char **argv) {
     file_descriptor = open(path, O_RDWR);
     if (file_descriptor < 0) {
         if (flag > 0)
-            perror(RED "[ERROR]" COLOR_RESET " Unable to open device\nExiting...");
+            printf(RED "[ERROR]" COLOR_RESET " Unable to open device\nExiting...");
         rtrn_code = 3;
         goto RTRN;
     }
