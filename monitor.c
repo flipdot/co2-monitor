@@ -28,6 +28,7 @@
  * escape code definitions for colorized output
  */
 #define RED     "\033[1;31m"
+#define GREEN   "\033[1;32m"
 #define YELLOW  "\033[1;33m"
 #define BLUE    "\033[1;34m"
 #define COLOR_RESET   "\033[m"
@@ -78,8 +79,8 @@ int main(const int argc, char **argv) {
         }
     }
 
-    if (flag > 1)
-        printf(BLUE "[INFO]" COLOR_RESET " starting the monitor.\n");
+    if (flag > 0)
+        printf(GREEN "[STARTING]" COLOR_RESET "\n");
 
     char *path;
     int file_descriptor, result;
@@ -95,7 +96,7 @@ int main(const int argc, char **argv) {
         rtrn_code = 2;
         goto RTRN;
     }
-    if (flag > 1)
+    if (flag > 2)
         printf(BLUE "[INFO]" COLOR_RESET " found device on path %s.\n", path);
 
     /* open device */
@@ -109,7 +110,7 @@ int main(const int argc, char **argv) {
         goto RTRN;
     }
 
-    if (flag > 1)
+    if (flag > 2)
         printf(BLUE "[INFO]" COLOR_RESET " opened device %s successfully.\n", path);
 
     /* sending feature 'SET_REPORT' */
@@ -122,7 +123,7 @@ int main(const int argc, char **argv) {
         rtrn_code = 4;
         goto CLOSE_DEV;
     }
-    if (flag > 1)
+    if (flag > 2)
         printf(BLUE "[INFO]" COLOR_RESET " HID-Feature 'SET_REPORT' successfully sent to device\n");
 
     /* reading from device */
@@ -140,7 +141,7 @@ int main(const int argc, char **argv) {
             goto CLOSE_DEV;
         } else {
             /* decrypt read bytes */
-            if (flag > 1)
+            if (flag > 2)
                 printf(BLUE "[INFO]" COLOR_RESET " successfully received encrypted data from device\n");
             pseudo_decrypt(&recieved_data);
 
@@ -170,8 +171,10 @@ int main(const int argc, char **argv) {
     if (flag > 1)
         printf(BLUE "[INFO]" COLOR_RESET " start closing device\n");
     close(file_descriptor);
-    if (flag > 1)
-        printf(BLUE "[INFO]" COLOR_RESET " closed device %s successfully.\nExiting...", path);
+    if (flag > 2)
+        printf(BLUE "[INFO]" COLOR_RESET " closed device %s successfully.\n" , path);
+    if (flag > 0)
+        printf(GREEN "[EXITING]" COLOR_RESET "\n");
 
     RTRN:
     return rtrn_code;
@@ -305,7 +308,8 @@ void print_help() {
                    "   -h                 display this help\n"
                    "   -l                 run in headless-mode reduces output to a minimum\n"
                    "   -d <debug-level>   higher debuglevel specializes output:\n"
-                   "                          0 => only colorized output of the CO2-value and the temperature\n"
-                   "                          1 => like 0 with colorized additional ERROR-Messages\n"
-                   "                          2 => like 1 with colorized additional INFO-Messages\n");
+                   "                          0  only colorized output of the CO2-value and the temperature\n"
+                   "                          1  like 0 with colorized additional ERROR-Messages\n"
+                   "                          2  like 1 with colorized additional INFO-Messages\n"
+                   "                          3  like 2 with higher verbosity\n");
 }
