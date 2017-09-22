@@ -12,7 +12,7 @@ import subprocess
 import time
 import paho.mqtt.client as mqtt
 
-MQTT_HOST = 'localhost'
+MQTT_HOST = 'power-pi.fd'
 MQTT_TOPIC_CO2 = 'sensors/lounge/co2'
 POLL_INTERVAL = 5  # seconds
 MONITOR_BIN = '/home/co2-monitor/co2-monitor/monitor'
