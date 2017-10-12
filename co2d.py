@@ -19,12 +19,14 @@ MONITOR_BIN = '/home/co2-monitor/co2-monitor/monitor'
 MONITOR_ARGS = ['-l']
 
 
-def get_co2():
+def get_data():
     call = [MONITOR_BIN] + MONITOR_ARGS
     proc = subprocess.Popen(call, stdout=subprocess.PIPE)
     ret = proc.stdout.readline()
     co2 = ret.split()[1]
-    return int(co2)
+    ret = proc.stdout.readline()
+    temp = ret.split()[1]
+    return int(co2), float(temp)
 
 
 client = mqtt.Client()
@@ -33,7 +35,9 @@ client.connect(MQTT_HOST)
 while True:
     # Create JSON object containing CO2 value
     json_data = {}
-    json_data['co2'] = get_co2()
+    co2, temp = get_data()
+    json_data['co2'] = co2
+    json_data['temperature'] = temp
     json_text = json.dumps(json_data)
 
     # Publish the value to the corresponding topic on the broker
