@@ -23,9 +23,15 @@ def get_data():
     call = [MONITOR_BIN] + MONITOR_ARGS
     proc = subprocess.Popen(call, stdout=subprocess.PIPE)
     ret = proc.stdout.readline()
-    co2 = ret.split()[1]
+    try:
+        co2 = ret.split()[1]
+    except:
+        co2 = 0
     ret = proc.stdout.readline()
-    temp = ret.split()[1]
+    try:
+        temp = ret.split()[1]
+    except:
+        temp = 0
     return int(co2), float(temp)
 
 
